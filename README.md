@@ -16,4 +16,22 @@ Hassan and Ahmad Waqar are building a service that forecasts the next seven dail
 
 ## Working together
 
+### Run Hassan's data fetch
+
+From the project folder in PowerShell, run the following command. The uv tool sets up Python and the script dependencies on first use.
+
+```powershell
+uv run --python 3.12 src/etl_fetch.py
+```
+
+The default fetch covers the last 365 completed UTC days. A successful run replaces `data/raw/btc_usd.csv` after checking date coverage, prices, and volume. The generated data stays local. To fetch a specific period, pass `--start YYYY-MM-DD --end YYYY-MM-DD`. The end date is exclusive.
+
+```powershell
+$prices = Import-Csv .\data\raw\btc_usd.csv
+$prices.Count
+$prices | Select-Object -Last 5 | Format-Table
+```
+
+### Share changes
+
 Clone this repository once on each laptop. Start each task from an updated `main`, make changes on a separate branch, and push the branch to GitHub. Open a pull request so your teammate can review the changes before merging.
