@@ -1,0 +1,14 @@
+{
+  "model_version": "example-001",
+  "trained_through": "2026-01-01",
+  "metrics": {"mae": 125.0, "rmse": 150.0},
+  "forecast": [
+    {"date": "2026-01-02", "close_usd": 90001},
+    {"date": "2026-01-03", "close_usd": 90002},
+    {"date": "2026-01-04", "close_usd": 90003},
+    {"date": "2026-01-05", "close_usd": 90004},
+    {"date": "2026-01-06", "close_usd": 90005},
+    {"date": "2026-01-07", "close_usd": 90006},
+    {"date": "2026-01-08", "close_usd": 90007}
+  ]
+}
