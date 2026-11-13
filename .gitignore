@@ -1,3 +1,4 @@
 /data/raw/
+/models/
 __pycache__/
 .venv/
