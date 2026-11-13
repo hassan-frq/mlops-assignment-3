@@ -1,0 +1,15 @@
+# k8s/pvc.yaml — Persistent Volume Claim for the shared model directory.
+# Both training jobs and the API pods mount this same PVC.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-store
+  labels:
+    app: btc-forecast
+spec:
+  accessModes:
+    - ReadWriteMany          # Multiple API pods read; one trainer writes.
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: standard   # Uncomment and set your cluster's class if needed.
