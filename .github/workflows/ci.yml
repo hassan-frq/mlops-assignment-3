@@ -1,0 +1,83 @@
+name: CI/CD — Flask API
+
+on:
+  push:
+    branches: ["feature/flask-api", "main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/btc-forecast-api
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Lint + Test
+  # --------------------------------------------------------------------------
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt flake8
+
+      - name: Lint with flake8
+        run: |
+          # Fail on syntax errors or undefined names; warn on style.
+          flake8 app/ tests/ --max-line-length=100 \
+            --extend-ignore=E203,W503
+
+      - name: Run pytest
+        run: pytest -v --tb=short --cov=app --cov-report=term-missing tests/
+
+  # --------------------------------------------------------------------------
+  # 2. Build & Push Docker image (only on pushes to main or the feature branch)
+  # --------------------------------------------------------------------------
+  build-and-push:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
