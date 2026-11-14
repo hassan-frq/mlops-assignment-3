@@ -1,12 +1,12 @@
 # gunicorn.conf.py — Production Gunicorn configuration
 
-import multiprocessing
+import os
 
 # Bind
 bind = "0.0.0.0:5000"
 
-# Workers: 2–4 × CPU cores is the typical sweet spot for I/O-bound workloads.
-workers = multiprocessing.cpu_count() * 2 + 1
+# Small fixed worker count keeps memory within the 128Mi pod request; scale with pods.
+workers = int(os.environ.get("WEB_CONCURRENCY", 2))
 
 # Use sync workers (default). Switch to gevent/gthread if latency matters.
 worker_class = "sync"
@@ -24,3 +24,4 @@ loglevel = "info"
 timeout = 120
 graceful_timeout = 30
 keepalive = 5
+

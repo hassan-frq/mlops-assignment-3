@@ -31,18 +31,19 @@ COPY app/        ./app/
 COPY gunicorn.conf.py .
 COPY tests/fixtures/ ./tests/fixtures/
 
-# Shared model directory (mounted as a PVC in Kubernetes / volume in Compose)
-RUN mkdir -p /models && chown appuser:appgroup /models
+# Shared model directory /app/models (PVC in Kubernetes / volume in Compose)
+RUN mkdir -p /app/models && chown appuser:appgroup /app/models
 
 USER appuser
 
 EXPOSE 5000
 
-# MODEL_ARTIFACT_PATH can be overridden at runtime to point at the real model.
-ENV MODEL_ARTIFACT_PATH=""
+# Falls back to the bundled sample fixture if this file does not exist yet.
+ENV MODEL_ARTIFACT_PATH="/app/models/forecast.json"
 
 # Health-check using the /health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
 
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "app.app:create_app()"]
+

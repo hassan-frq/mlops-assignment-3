@@ -1,5 +1,5 @@
 # k8s/hpa.yaml — Horizontal Pod Autoscaler for the forecast API.
-# Scales between 2 and 10 replicas based on CPU utilisation.
+# Scales between 3 and 8 replicas based on CPU utilisation.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -11,8 +11,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: btc-forecast-api
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 3
+  maxReplicas: 8
   metrics:
     - type: Resource
       resource:
@@ -39,3 +39,4 @@ spec:
         - type: Pods
           value: 1
           periodSeconds: 60
+

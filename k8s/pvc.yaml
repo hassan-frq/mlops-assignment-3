@@ -13,3 +13,4 @@ spec:
     requests:
       storage: 1Gi
   # storageClassName: standard   # Uncomment and set your cluster's class if needed.
+

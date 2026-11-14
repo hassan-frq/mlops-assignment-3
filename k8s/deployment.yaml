@@ -7,7 +7,7 @@ metadata:
     app: btc-forecast
     component: api
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: btc-forecast
@@ -42,7 +42,7 @@ spec:
 
           env:
             - name: MODEL_ARTIFACT_PATH
-              value: /models/forecast.json   # Written by training job
+              value: /app/models/forecast.json   # Written by training job
 
           # ----------------------------------------------------------------
           # Probes
@@ -52,7 +52,7 @@ spec:
               path: /health
               port: http
             initialDelaySeconds: 15
-            periodSeconds: 20
+            periodSeconds: 10
             failureThreshold: 3
 
           readinessProbe:
@@ -69,20 +69,21 @@ spec:
           resources:
             requests:
               cpu: "100m"
-              memory: "256Mi"
+              memory: "128Mi"
             limits:
               cpu: "500m"
-              memory: "512Mi"
+              memory: "256Mi"
 
           # ----------------------------------------------------------------
           # Shared model volume
           # ----------------------------------------------------------------
           volumeMounts:
             - name: model-store
-              mountPath: /models
+              mountPath: /app/models
               readOnly: true
 
       volumes:
         - name: model-store
           persistentVolumeClaim:
             claimName: model-store
+

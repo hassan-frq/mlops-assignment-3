@@ -47,12 +47,17 @@ class TestHealth:
         assert resp.status_code == 200
 
     def test_status_ok(self, client):
-        body = resp = client.get("/health").get_json()
+        body = client.get("/health").get_json()
         assert body["status"] == "ok"
 
     def test_includes_model_version(self, client, fixture_data):
         body = client.get("/health").get_json()
         assert body["model_version"] == fixture_data["model_version"]
+
+    def test_includes_uptime(self, client):
+        body = client.get("/health").get_json()
+        assert isinstance(body["uptime_seconds"], (int, float))
+        assert body["uptime_seconds"] >= 0
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +104,23 @@ class TestPredict:
             data="{}",
             content_type="text/plain",
         )
+        assert resp.status_code == 400
+
+    def test_malformed_json_returns_400(self, client):
+        resp = client.post(
+            "/predict",
+            data="{not valid json",
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "error" in resp.get_json()
+
+    def test_empty_body_with_json_type_returns_400(self, client):
+        resp = client.post("/predict", data="", content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_non_object_json_returns_400(self, client):
+        resp = client.post("/predict", json=[1, 2, 3])
         assert resp.status_code == 400
 
     def test_get_method_not_allowed(self, client):
@@ -170,6 +192,57 @@ class TestReload:
     def test_get_method_not_allowed(self, client):
         resp = client.get("/reload")
         assert resp.status_code == 405
+
+
+class TestVersionSwitch:
+    """Reload must move the service from one model version to another."""
+
+    @staticmethod
+    def _artifact(path, version, base):
+        data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+        data["model_version"] = version
+        for i, entry in enumerate(data["forecast"]):
+            entry["close_usd"] = base + i
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_reload_switches_version(self, tmp_path):
+        model = tmp_path / "forecast.json"
+        self._artifact(model, "v1", 100)
+        app = create_app(artifact_path=str(model))
+        c = app.test_client()
+        assert c.post("/predict", json={}).get_json()["model_version"] == "v1"
+
+        self._artifact(model, "v2", 200)
+        resp = c.post("/reload", json={})
+        assert resp.status_code == 200
+        assert resp.get_json()["model_version"] == "v2"
+
+        body = c.post("/predict", json={}).get_json()
+        assert body["model_version"] == "v2"
+        assert body["forecast"][0]["close_usd"] == 200
+        assert c.get("/health").get_json()["model_version"] == "v2"
+        assert c.get("/metrics").get_json()["model_version"] == "v2"
+
+    def test_new_artifact_is_picked_up_without_reload(self, tmp_path):
+        """Simulates a worker that never received the /reload request."""
+        model = tmp_path / "forecast.json"
+        self._artifact(model, "v1", 100)
+        app = create_app(artifact_path=str(model))
+        c = app.test_client()
+        assert c.get("/health").get_json()["model_version"] == "v1"
+
+        self._artifact(model, "v2", 200)
+        assert c.get("/health").get_json()["model_version"] == "v2"
+
+    def test_invalid_artifact_keeps_last_good_model(self, tmp_path):
+        model = tmp_path / "forecast.json"
+        self._artifact(model, "v1", 100)
+        app = create_app(artifact_path=str(model))
+        c = app.test_client()
+
+        model.write_text("{broken", encoding="utf-8")
+        assert c.post("/reload", json={}).status_code == 422
+        assert c.post("/predict", json={}).get_json()["model_version"] == "v1"
 
 
 # ---------------------------------------------------------------------------
