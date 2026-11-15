@@ -38,6 +38,9 @@ def publish(artifact, destination):
         temp = Path(stream.name)
     try:
         temp.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
+        # The API reads this artifact under a different container user.
+        if temp.stat().st_mode & 0o444 != 0o444:
+            temp.chmod(0o644)
         temp.replace(destination)
     finally:
         temp.unlink(missing_ok=True)
