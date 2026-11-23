@@ -1,0 +1,89 @@
+# k8s/deployment.yaml — Kubernetes Deployment for the BTC-USD forecast API.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: btc-forecast-api
+  labels:
+    app: btc-forecast
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: btc-forecast
+      component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: btc-forecast
+        component: api
+    spec:
+      # ----------------------------------------------------------------
+      # Security context — run as the non-root user created in Dockerfile
+      # ----------------------------------------------------------------
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+
+      containers:
+        - name: api
+          # Replace with your actual registry / image tag after CI/CD push.
+          image: ghcr.io/hassan-frq/mlops-assignment-3/btc-forecast-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              name: http
+
+          env:
+            - name: MODEL_ARTIFACT_PATH
+              value: /app/models/forecast.json   # Written by training job
+
+          # ----------------------------------------------------------------
+          # Probes
+          # ----------------------------------------------------------------
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ----------------------------------------------------------------
+          # Resources
+          # ----------------------------------------------------------------
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          # ----------------------------------------------------------------
+          # Shared model volume
+          # ----------------------------------------------------------------
+          volumeMounts:
+            - name: model-store
+              mountPath: /app/models
+              readOnly: true
+
+      volumes:
+        - name: model-store
+          persistentVolumeClaim:
+            claimName: model-store
+
