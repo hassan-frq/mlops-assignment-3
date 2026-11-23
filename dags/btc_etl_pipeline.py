@@ -31,16 +31,10 @@ def btc_etl_pipeline():
 
     @task
     def prepare_features(raw):
-        import pandas as pd
+        from src.features import prepare_features as build_features
 
-        frame = pd.read_csv(raw, parse_dates=["Date"]).sort_values("Date")
-        close = frame["Close"]
-        frame["ma_7"] = close.rolling(7).mean()
-        frame["ma_30"] = close.rolling(30).mean()
-        frame["volatility_7"] = close.pct_change().rolling(7).std()
-        # Keep the full close series for AR(1), including indicator warm-up rows.
         path = Path(raw).with_name("features.csv")
-        frame.to_csv(path, index=False, date_format="%Y-%m-%d")
+        build_features(raw, path)
         return str(path)
 
     @task
