@@ -28,7 +28,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt flake8
+        run: pip install -r requirements.txt -r kubeflow/requirements.txt flake8
 
       - name: Lint with flake8
         run: |
@@ -38,6 +38,11 @@ jobs:
 
       - name: Run pytest
         run: pytest -v --tb=short --cov=app --cov-report=term-missing tests/
+
+      - name: Verify compiled Kubeflow pipeline
+        run: |
+          python kubeflow/btc_kfp_pipeline.py
+          git diff --exit-code -- kubeflow/btc_kfp_pipeline.yaml
 
   # --------------------------------------------------------------------------
   # 2. Build & Push Docker image (only on pushes to main or the feature branch)

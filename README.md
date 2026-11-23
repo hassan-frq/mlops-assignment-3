@@ -16,6 +16,23 @@ Hassan and Ahmad Waqar are building a service that forecasts the next seven dail
 
 ## Working together
 
+### Kubeflow pipeline
+
+Part C2 is implemented in `kubeflow/btc_kfp_pipeline.py` with three KFP v2 container components. Ingestion passes a Dataset artifact to feature generation, which passes a Dataset to training. Training produces a Model artifact containing the AR coefficients and seven forecasts, plus Metrics metadata with validation scores and the baseline acceptance decision. Rejected candidates remain available for inspection. Airflow controls live API publication.
+
+Compile from the repository root using Python 3.11 in your chosen environment.
+
+```powershell
+python -m pip install -r kubeflow/requirements.txt
+python kubeflow/btc_kfp_pipeline.py
+```
+
+The checked-in `kubeflow/btc_kfp_pipeline.yaml` is ready to upload through a KFP v2 installation's Pipelines page. Create a run and supply `start_date` and `end_date` as UTC ISO dates, for example `2025-11-13` and `2026-11-13`. End is exclusive and must be no later than today. Select the installation's artifact storage root when creating the run. A recurring run needs updated date parameters for each intended window.
+
+Components use `python:3.11-slim` and install their pinned Python dependencies at startup, so worker pods require registry, PyPI, and Yahoo connectivity. Embedded source makes the YAML self-contained. Recompile it after changing the shared scripts. Ingestion caching is disabled to fetch the requested data again.
+
+The shared feature and training code is tested by executing the commands extracted from compiled YAML on fixed daily data, including artifact metadata assertions. CI also recompiles the YAML and checks that it matches the committed version. Compilation and local component execution have been verified. Execution on a Kubeflow cluster remains unverified.
+
 ### Run the daily Airflow pipeline on Docker Desktop
 
 From the repository root, use Docker with Linux containers and Compose v2. Check the storage location of your Docker engine before the first build. This setup uses Waqar's published API image and needs no local Python installation or drive-specific launcher.

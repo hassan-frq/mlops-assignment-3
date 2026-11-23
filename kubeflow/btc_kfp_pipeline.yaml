@@ -1,0 +1,245 @@
+# PIPELINE DEFINITION
+# Name: btc-seven-day-forecast
+# Description: Dates are UTC. End is exclusive. Outputs retain rejected candidates too.
+# Inputs:
+#    end_date: str
+#    start_date: str
+components:
+  comp-features:
+    executorLabel: exec-features
+    inputDefinitions:
+      artifacts:
+        raw:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        processed:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-ingest:
+    executorLabel: exec-ingest
+    inputDefinitions:
+      parameters:
+        end_date:
+          parameterType: STRING
+        start_date:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        raw:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train:
+    executorLabel: exec-train
+    inputDefinitions:
+      artifacts:
+        processed:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-features:
+      container:
+        args:
+        - if [ -n "$1" ]; then pip install --no-cache-dir $1; fi; shift; exec python
+          -c "$@"
+        - --
+        - pandas==2.3.3
+        - "\"\"\"Build trailing indicators without discarding the AR model's close\
+          \ history.\"\"\"\n\nfrom pathlib import Path\n\nimport pandas as pd\n\n\n\
+          def prepare_features(source, destination):\n    frame = pd.read_csv(source,\
+          \ parse_dates=[\"Date\"]).sort_values(\"Date\")\n    close = frame[\"Close\"\
+          ]\n    frame[\"ma_7\"] = close.rolling(7).mean()\n    frame[\"ma_30\"] =\
+          \ close.rolling(30).mean()\n    frame[\"volatility_7\"] = close.pct_change().rolling(7).std()\n\
+          \    Path(destination).parent.mkdir(parents=True, exist_ok=True)\n    frame.to_csv(destination,\
+          \ index=False, date_format=\"%Y-%m-%d\")\n\nimport sys\nprepare_features(sys.argv[1],\
+          \ sys.argv[2])\n"
+        - '{{$.inputs.artifacts[''raw''].path}}'
+        - '{{$.outputs.artifacts[''processed''].path}}'
+        command:
+        - sh
+        - -ec
+        image: python:3.11-slim
+    exec-ingest:
+      container:
+        args:
+        - if [ -n "$1" ]; then pip install --no-cache-dir $1; fi; shift; exec python
+          -c "$@"
+        - --
+        - yfinance==1.8.0
+        - "# /// script\n# requires-python = \">=3.11\"\n# dependencies = [\"yfinance>=0.2.54,<2\"\
+          ]\n# ///\n\"\"\"Fetch completed BTC-USD daily candles and atomically publish\
+          \ a raw CSV.\"\"\"\n\nimport argparse\nfrom datetime import date, datetime,\
+          \ timedelta, timezone\nfrom pathlib import Path\nfrom tempfile import NamedTemporaryFile\n\
+          \nimport numpy as np\nimport pandas as pd\nimport yfinance as yf\n\n\ndef\
+          \ fetch(start: date, end: date, output: Path) -> int:\n    \"\"\"Fetch the\
+          \ inclusive start through the exclusive end in UTC.\"\"\"\n    if not start\
+          \ < end <= datetime.now(timezone.utc).date():\n        raise ValueError(\"\
+          Choose a start before end, with end no later than today.\")\n    frame =\
+          \ yf.Ticker(\"BTC-USD\").history(\n        start=start.isoformat(), end=end.isoformat(),\
+          \ interval=\"1d\",\n        auto_adjust=False, raise_errors=True,\n    )\n\
+          \    columns = [\"Open\", \"High\", \"Low\", \"Close\", \"Volume\"]\n  \
+          \  if frame.empty:\n        raise ValueError(\"Yahoo returned no BTC-USD\
+          \ data for this range.\")\n    frame = frame[columns].sort_index()\n   \
+          \ frame.index = frame.index.tz_convert(\"UTC\").tz_localize(None)\n    expected\
+          \ = pd.date_range(start, end - timedelta(days=1), freq=\"D\")\n    if not\
+          \ frame.index.equals(expected):\n        raise ValueError(\"Yahoo returned\
+          \ missing, duplicate, or unexpected dates.\")\n    prices = frame[[\"Open\"\
+          , \"Close\"]]\n    if (\n        not np.isfinite(frame.to_numpy()).all()\n\
+          \        or (frame[\"Low\"] <= 0).any()\n        or (frame[\"Volume\"] <\
+          \ 0).any()\n        or (prices.min(axis=1) < frame[\"Low\"]).any()\n   \
+          \     or (prices.max(axis=1) > frame[\"High\"]).any()\n    ):\n        raise\
+          \ ValueError(\"Yahoo returned invalid prices or volume.\")\n\n    output.parent.mkdir(parents=True,\
+          \ exist_ok=True)\n    with NamedTemporaryFile(dir=output.parent, delete=False)\
+          \ as temporary:\n        staging = Path(temporary.name)\n    try:\n    \
+          \    frame.to_csv(staging, index_label=\"Date\", date_format=\"%Y-%m-%d\"\
+          )\n        staging.replace(output)\n    finally:\n        staging.unlink(missing_ok=True)\n\
+          \    return len(frame)\n\n\n\nimport sys\nfetch(date.fromisoformat(sys.argv[1]),\
+          \ date.fromisoformat(sys.argv[2]), Path(sys.argv[3]))\n"
+        - '{{$.inputs.parameters[''start_date'']}}'
+        - '{{$.inputs.parameters[''end_date'']}}'
+        - '{{$.outputs.artifacts[''raw''].path}}'
+        command:
+        - sh
+        - -ec
+        image: python:3.11-slim
+    exec-train:
+      container:
+        args:
+        - if [ -n "$1" ]; then pip install --no-cache-dir $1; fi; shift; exec python
+          -c "$@"
+        - --
+        - ''
+        - "\"\"\"Fit an autoregression to daily closes and evaluate a seven-day forecast.\"\
+          \"\"\n\nimport csv\nimport hashlib\nimport json\nimport math\nfrom datetime\
+          \ import date, timedelta\nfrom pathlib import Path\nfrom statistics import\
+          \ mean\nfrom tempfile import NamedTemporaryFile\n\n\ndef fit(prices):\n\
+          \    previous, following = prices[:-1], prices[1:]\n    x_mean, y_mean =\
+          \ mean(previous), mean(following)\n    variance = sum((x - x_mean) ** 2\
+          \ for x in previous)\n    slope = 0.0\n    if variance:\n        slope =\
+          \ sum(\n            (x - x_mean) * (y - y_mean) for x, y in zip(previous,\
+          \ following)\n        ) / variance\n    return {\"intercept\": y_mean -\
+          \ slope * x_mean, \"slope\": slope}\n\n\ndef predict(model, last):\n   \
+          \ result = []\n    for _ in range(7):\n        last = model[\"intercept\"\
+          ] + model[\"slope\"] * last\n        if not math.isfinite(last) or last\
+          \ <= 0:\n            raise ValueError(\"Model produced an invalid closing\
+          \ price.\")\n        result.append(last)\n    return result\n\n\ndef publish(artifact,\
+          \ destination):\n    destination.parent.mkdir(exist_ok=True, parents=True)\n\
+          \    with NamedTemporaryFile(dir=destination.parent, delete=False) as stream:\n\
+          \        temp = Path(stream.name)\n    try:\n        temp.write_text(json.dumps(artifact,\
+          \ indent=2) + \"\\n\", encoding=\"utf-8\")\n        # The API reads this\
+          \ artifact under a different container user.\n        if temp.stat().st_mode\
+          \ & 0o444 != 0o444:\n            temp.chmod(0o644)\n        temp.replace(destination)\n\
+          \    finally:\n        temp.unlink(missing_ok=True)\n\n\ndef train(source,\
+          \ destination):\n    with source.open(newline=\"\", encoding=\"utf-8\")\
+          \ as stream:\n        rows = list(csv.DictReader(stream))\n    dates = [date.fromisoformat(row[\"\
+          Date\"]) for row in rows]\n    prices = [float(row[\"Close\"]) for row in\
+          \ rows]\n    if len(prices) < 10 or not all(math.isfinite(p) and p > 0 for\
+          \ p in prices):\n        raise ValueError(\"Expected at least ten positive\
+          \ daily closing prices.\")\n    if any(b - a != timedelta(days=1) for a,\
+          \ b in zip(dates, dates[1:])):\n        raise ValueError(\"Expected consecutive\
+          \ dates in ascending order.\")\n\n    training = prices[:-7]\n    validation\
+          \ = predict(fit(training), training[-1])\n    errors = [actual - predicted\
+          \ for actual, predicted in zip(prices[-7:], validation)]\n    model_mae\
+          \ = mean(map(abs, errors))\n    baseline_mae = mean(abs(actual - training[-1])\
+          \ for actual in prices[-7:])\n    metrics = {\n        \"mae\": round(model_mae,\
+          \ 2),\n        \"rmse\": round(math.sqrt(mean(e * e for e in errors)), 2),\n\
+          \    }\n    model = fit(prices)\n    forecast = [\n        {\"date\": (dates[-1]\
+          \ + timedelta(days=i)).isoformat(), \"close_usd\": round(p, 2)}\n      \
+          \  for i, p in enumerate(predict(model, prices[-1]), start=1)\n    ]\n \
+          \   artifact = {\n        \"trained_through\": dates[-1].isoformat(), \"\
+          metrics\": metrics,\n        \"forecast\": forecast, \"model\": {\"type\"\
+          : \"AR(1)\", **model},\n        \"validation\": {\n            \"start\"\
+          : dates[-7].isoformat(),\n            \"end\": dates[-1].isoformat(),\n\
+          \            \"last_close_baseline_mae\": round(baseline_mae, 2),\n    \
+          \        \"accepted\": model_mae < baseline_mae,\n        },\n    }\n  \
+          \  digest = hashlib.sha256(json.dumps(artifact).encode()).hexdigest()[:12]\n\
+          \    artifact[\"model_version\"] = f\"ar1-{digest}\"\n    publish(artifact,\
+          \ destination)\n    return artifact\n\n\n\nimport sys\nartifact = train(Path(sys.argv[1]),\
+          \ Path(sys.argv[2]))\n# KFP executor metadata makes these values visible\
+          \ in the pipeline UI.\nmetadata = dict(artifact[\"metrics\"])\nmetadata.update(artifact[\"\
+          validation\"])\nresult = {\"artifacts\": {\n    \"metrics\": {\"artifacts\"\
+          : [{\"metadata\": metadata}]},\n    \"model\": {\"artifacts\": [{\"metadata\"\
+          : {\n        \"model_version\": artifact[\"model_version\"],\n        \"\
+          accepted\": artifact[\"validation\"][\"accepted\"]\n    }}]}\n}}\npath =\
+          \ Path(sys.argv[3])\npath.parent.mkdir(parents=True, exist_ok=True)\npath.write_text(json.dumps(result),\
+          \ encoding=\"utf-8\")\n"
+        - '{{$.inputs.artifacts[''processed''].path}}'
+        - '{{$.outputs.artifacts[''model''].path}}'
+        - '{{$.outputs.output_file}}'
+        command:
+        - sh
+        - -ec
+        image: python:3.11-slim
+pipelineInfo:
+  description: Dates are UTC. End is exclusive. Outputs retain rejected candidates
+    too.
+  name: btc-seven-day-forecast
+root:
+  dag:
+    tasks:
+      features:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-features
+        dependentTasks:
+        - ingest
+        inputs:
+          artifacts:
+            raw:
+              taskOutputArtifact:
+                outputArtifactKey: raw
+                producerTask: ingest
+        taskInfo:
+          name: features
+      ingest:
+        cachingOptions: {}
+        componentRef:
+          name: comp-ingest
+        inputs:
+          parameters:
+            end_date:
+              componentInputParameter: end_date
+            start_date:
+              componentInputParameter: start_date
+        taskInfo:
+          name: ingest
+      train:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train
+        dependentTasks:
+        - features
+        inputs:
+          artifacts:
+            processed:
+              taskOutputArtifact:
+                outputArtifactKey: processed
+                producerTask: features
+        taskInfo:
+          name: train
+  inputDefinitions:
+    parameters:
+      end_date:
+        parameterType: STRING
+      start_date:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.18.2
