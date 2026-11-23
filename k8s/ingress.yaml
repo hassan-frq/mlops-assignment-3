@@ -1,0 +1,25 @@
+# k8s/ingress.yaml — Nginx Ingress for external access.
+# Requires the nginx ingress controller to be installed in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: btc-forecast-api
+  labels:
+    app: btc-forecast
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: btc-forecast.local   # Replace with your real domain / minikube IP alias
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: btc-forecast-api
+                port:
+                  name: http
+
