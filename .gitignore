@@ -20,4 +20,5 @@ htmlcov/
 # IDE
 .vscode/
 .idea/
+/load_tests/results/
 

@@ -16,6 +16,11 @@ Hassan and Ahmad Waqar are building a service that forecasts the next seven dail
 
 ## Working together
 
+### Load testing
+
+The Locust scenario and Kubernetes evidence commands are in [load_tests/README.md](load_tests/README.md).
+
+
 ### Run the daily Airflow pipeline on Docker Desktop
 
 From the repository root, use Docker with Linux containers and Compose v2. Check the storage location of your Docker engine before the first build. This setup uses Waqar's published API image and needs no local Python installation or drive-specific launcher.
