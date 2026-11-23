@@ -104,6 +104,16 @@ class _ModelStore:
         with self._lock:
             return list(self._data.get("forecast", []))
 
+    def forecast_slice(self, days: int) -> list[dict[str, Any]]:
+        """Return the first *days* entries from the stored forecast.
+
+        When *days* exceeds the number of stored entries the full list is
+        returned (the caller already validated the range).
+        """
+        with self._lock:
+            full = list(self._data.get("forecast", []))
+        return full[:days]
+
     @property
     def trained_through(self) -> str:
         with self._lock:

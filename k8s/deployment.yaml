@@ -40,9 +40,25 @@ spec:
             - containerPort: 5000
               name: http
 
+          # ----------------------------------------------------------------
+          # Environment — sourced from ConfigMap (non-sensitive) and Secret
+          # ----------------------------------------------------------------
+          envFrom:
+            - configMapRef:
+                name: btc-forecast-config
+            - secretRef:
+                name: btc-forecast-secret
+
+          # Downward-API additions not in the ConfigMap
           env:
-            - name: MODEL_ARTIFACT_PATH
-              value: /app/models/forecast.json   # Written by training job
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
 
           # ----------------------------------------------------------------
           # Probes
@@ -64,7 +80,7 @@ spec:
             failureThreshold: 3
 
           # ----------------------------------------------------------------
-          # Resources
+          # Resources  (memory limit raised to 512 Mi per assignment spec)
           # ----------------------------------------------------------------
           resources:
             requests:
@@ -72,7 +88,7 @@ spec:
               memory: "128Mi"
             limits:
               cpu: "500m"
-              memory: "256Mi"
+              memory: "512Mi"
 
           # ----------------------------------------------------------------
           # Shared model volume
@@ -80,10 +96,9 @@ spec:
           volumeMounts:
             - name: model-store
               mountPath: /app/models
-              readOnly: true
+              readOnly: false          # Training job writes here via the same PVC
 
       volumes:
         - name: model-store
           persistentVolumeClaim:
             claimName: model-store
-

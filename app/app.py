@@ -4,7 +4,7 @@ app.py — Flask API for the BTC-USD 7-day forecast service.
 Endpoints
 ---------
 GET  /health    Liveness probe (status, model version, uptime).
-POST /predict   Return the next 7-day BTC-USD forecast.
+POST /predict   Return the next N-day BTC-USD forecast (default 7, max 30).
 GET  /metrics   Return the latest model's validation metrics.
 POST /reload    Hot-reload the model artifact from disk.
 """
@@ -56,11 +56,15 @@ def create_app(artifact_path: str | None = None) -> Flask:
 
     @app.post("/predict")
     def predict():
-        """Return the 7-day BTC-USD forecast.
+        """Return the BTC-USD forecast.
 
-        Body: a JSON object, normally ``{}``. Its content is ignored.
-        Returns 400 when the Content-Type is not application/json or the body
-        is not valid JSON.
+        Body (optional JSON object):
+            forecast_days  int  Number of days to return (1-30, default 7).
+
+        Returns 400 when:
+          - Content-Type is not application/json
+          - body is not valid JSON / not an object
+          - forecast_days is not an integer in [1, 30]
         """
         if not request.is_json:
             return (
@@ -75,6 +79,20 @@ def create_app(artifact_path: str | None = None) -> Flask:
                 400,
             )
 
+        # --- forecast_days validation ---
+        raw_days = payload.get("forecast_days", 7)
+        if not isinstance(raw_days, int) or isinstance(raw_days, bool):
+            return (
+                jsonify({"error": "forecast_days must be an integer"}),
+                400,
+            )
+        if raw_days < 1 or raw_days > 30:
+            return (
+                jsonify({"error": "forecast_days must be between 1 and 30"}),
+                400,
+            )
+        forecast_days: int = raw_days
+
         if not store.is_loaded():
             return jsonify({"error": "Model not loaded yet"}), 503
 
@@ -82,7 +100,8 @@ def create_app(artifact_path: str | None = None) -> Flask:
             {
                 "model_version": store.version,
                 "trained_through": store.trained_through,
-                "forecast": store.forecast,
+                "forecast_days": forecast_days,
+                "forecast": store.forecast_slice(forecast_days),
             }
         )
 

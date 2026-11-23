@@ -61,7 +61,7 @@ class TestHealth:
 
 
 # ---------------------------------------------------------------------------
-# /predict
+# /predict — basic behaviour
 # ---------------------------------------------------------------------------
 
 
@@ -70,9 +70,13 @@ class TestPredict:
         resp = client.post("/predict", json={})
         assert resp.status_code == 200
 
-    def test_forecast_has_seven_entries(self, client):
+    def test_forecast_has_seven_entries_by_default(self, client):
         body = client.post("/predict", json={}).get_json()
         assert len(body["forecast"]) == 7
+
+    def test_forecast_days_field_in_response(self, client):
+        body = client.post("/predict", json={}).get_json()
+        assert body["forecast_days"] == 7
 
     def test_forecast_entries_have_date_and_close(self, client):
         body = client.post("/predict", json={}).get_json()
@@ -130,6 +134,66 @@ class TestPredict:
     def test_forecast_matches_fixture(self, client, fixture_data):
         body = client.post("/predict", json={}).get_json()
         assert body["forecast"] == fixture_data["forecast"]
+
+
+# ---------------------------------------------------------------------------
+# /predict — forecast_days parameter
+# ---------------------------------------------------------------------------
+
+
+class TestPredictForecastDays:
+    """Validate the optional forecast_days input accepted by /predict."""
+
+    def test_explicit_seven_returns_seven(self, client):
+        body = client.post("/predict", json={"forecast_days": 7}).get_json()
+        assert len(body["forecast"]) == 7
+        assert body["forecast_days"] == 7
+
+    def test_three_days_returns_three(self, client):
+        body = client.post("/predict", json={"forecast_days": 3}).get_json()
+        assert len(body["forecast"]) == 3
+        assert body["forecast_days"] == 3
+
+    def test_one_day_returns_one(self, client):
+        body = client.post("/predict", json={"forecast_days": 1}).get_json()
+        assert len(body["forecast"]) == 1
+        assert body["forecast_days"] == 1
+
+    def test_days_exceeding_stored_returns_all(self, client, fixture_data):
+        # fixture has 7 entries; asking for 30 should return all 7
+        body = client.post("/predict", json={"forecast_days": 30}).get_json()
+        assert body["forecast"] == fixture_data["forecast"]
+
+    def test_zero_days_returns_400(self, client):
+        resp = client.post("/predict", json={"forecast_days": 0})
+        assert resp.status_code == 400
+        assert "forecast_days" in resp.get_json()["error"]
+
+    def test_negative_days_returns_400(self, client):
+        resp = client.post("/predict", json={"forecast_days": -1})
+        assert resp.status_code == 400
+
+    def test_too_many_days_returns_400(self, client):
+        resp = client.post("/predict", json={"forecast_days": 31})
+        assert resp.status_code == 400
+
+    def test_string_days_returns_400(self, client):
+        resp = client.post("/predict", json={"forecast_days": "7"})
+        assert resp.status_code == 400
+
+    def test_float_days_returns_400(self, client):
+        resp = client.post("/predict", json={"forecast_days": 3.5})
+        assert resp.status_code == 400
+
+    def test_bool_days_returns_400(self, client):
+        # bool is a subclass of int in Python — we explicitly reject it
+        resp = client.post("/predict", json={"forecast_days": True})
+        assert resp.status_code == 400
+
+    def test_subset_dates_match_fixture_start(self, client, fixture_data):
+        """The first N dates in a sliced response must match the fixture."""
+        body = client.post("/predict", json={"forecast_days": 3}).get_json()
+        assert body["forecast"] == fixture_data["forecast"][:3]
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,10 @@
-# k8s/service.yaml — ClusterIP service for the forecast API.
+# k8s/service.yaml — Services for the BTC-USD forecast API.
+#
+# Two services are created:
+#   1. btc-forecast-api           ClusterIP  — internal traffic and Ingress backend.
+#   2. btc-forecast-api-nodeport  NodePort   — direct external access on every node's IP.
+---
+# 1. Internal ClusterIP (used by the Ingress controller)
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,4 +22,26 @@ spec:
       targetPort: http
       protocol: TCP
   type: ClusterIP
-
+---
+# 2. NodePort — exposes the API on every cluster node at a static port.
+#    Minikube:  minikube service btc-forecast-api-nodeport --url
+#    Kind/bare: kubectl get svc btc-forecast-api-nodeport  (node IP + nodePort)
+apiVersion: v1
+kind: Service
+metadata:
+  name: btc-forecast-api-nodeport
+  labels:
+    app: btc-forecast
+    component: api
+    exposure: external
+spec:
+  selector:
+    app: btc-forecast
+    component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080
+      protocol: TCP
+  type: NodePort
