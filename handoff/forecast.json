@@ -1,0 +1,49 @@
+{
+  "trained_through": "2026-11-12",
+  "metrics": {
+    "mae": 1377.34,
+    "rmse": 1916.59
+  },
+  "forecast": [
+    {
+      "date": "2026-11-13",
+      "close_usd": 71375.85
+    },
+    {
+      "date": "2026-11-14",
+      "close_usd": 71407.97
+    },
+    {
+      "date": "2026-11-15",
+      "close_usd": 71439.36
+    },
+    {
+      "date": "2026-11-16",
+      "close_usd": 71470.02
+    },
+    {
+      "date": "2026-11-17",
+      "close_usd": 71499.99
+    },
+    {
+      "date": "2026-11-18",
+      "close_usd": 71529.26
+    },
+    {
+      "date": "2026-11-19",
+      "close_usd": 71557.87
+    }
+  ],
+  "model": {
+    "type": "AR(1)",
+    "intercept": 1669.7181813013449,
+    "slope": 0.9770567445634042
+  },
+  "validation": {
+    "start": "2026-11-06",
+    "end": "2026-11-12",
+    "last_close_baseline_mae": 1609.29,
+    "accepted": true
+  },
+  "model_version": "ar1-1a49e86b1168"
+}
