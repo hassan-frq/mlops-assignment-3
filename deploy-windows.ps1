@@ -52,16 +52,17 @@ docker build -t $Image "$Repo"
 # 3. Load image into Minikube (avoids imagePullPolicy: Never caveat)
 # ─────────────────────────────────────────────────────────────────────────────
 Banner "Loading image into Minikube"
-docker save $Image | minikube image load --overwrite -
+# pipe via docker save → minikube image load (works without SSH agent)
+$saveProc  = Start-Process -FilePath "docker" -ArgumentList "save",$Image -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\btc-img.tar"
+$saveProc.WaitForExit()
+minikube image load "$env:TEMP\btc-img.tar" --overwrite
+Remove-Item "$env:TEMP\btc-img.tar" -ErrorAction SilentlyContinue
+Write-Host "Image loaded into Minikube."
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. Patch deployment to use local image (if using local build)
+# 4. Patch deployment to use local image (patch done AFTER manifests are applied)
 # ─────────────────────────────────────────────────────────────────────────────
-Banner "Patching deployment for local image"
-kubectl patch deployment btc-forecast-api -n $Ns `
-    --type=json `
-    -p='[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"'"$Image"'"},{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]' `
-    2>$null ; $true   # ignore if deployment not yet applied
+# (patch step moved to after kubectl apply so the deployment exists first)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Enable ingress addon
@@ -73,16 +74,16 @@ minikube addons enable ingress
 # 6. Apply all manifests
 # ─────────────────────────────────────────────────────────────────────────────
 Banner "Applying k8s manifests"
-kubectl apply -f "$Repo\k8s\pvc.yaml"       -n $Ns
-kubectl apply -f "$Repo\k8s\configmap.yaml" -n $Ns
-kubectl apply -f "$Repo\k8s\secret.yaml"    -n $Ns
+kubectl apply -f "$Repo\k8s\pvc.yaml"        -n $Ns
+kubectl apply -f "$Repo\k8s\configmap.yaml"  -n $Ns
+kubectl apply -f "$Repo\k8s\secret.yaml"     -n $Ns
 kubectl apply -f "$Repo\k8s\deployment.yaml" -n $Ns
 
-# Patch image + pull policy after apply so it always uses local build
+# Patch image + pull policy after apply so it always uses local build.
+# Store JSON in a variable so PowerShell does NOT treat { } as format placeholders.
 kubectl set image deployment/btc-forecast-api api=$Image -n $Ns
-kubectl patch deployment btc-forecast-api -n $Ns `
-    --type=json `
-    -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+$patchJson = '[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+kubectl patch deployment btc-forecast-api -n $Ns --type=json -p $patchJson
 
 kubectl apply -f "$Repo\k8s\service.yaml"   -n $Ns
 kubectl apply -f "$Repo\k8s\ingress.yaml"   -n $Ns
