@@ -46,7 +46,7 @@ if ($mk -ne "Running") {
 # 2. Build image in Docker Desktop
 # ─────────────────────────────────────────────────────────────────────────────
 Banner "Building Docker image: $Image"
-docker build -t $Image "$Repo"
+docker build -f "$Repo\app\Dockerfile" -t $Image "$Repo"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Load image into Minikube (avoids imagePullPolicy: Never caveat)
@@ -75,8 +75,7 @@ minikube addons enable ingress
 # ─────────────────────────────────────────────────────────────────────────────
 Banner "Applying k8s manifests"
 kubectl apply -f "$Repo\k8s\pvc.yaml"        -n $Ns
-kubectl apply -f "$Repo\k8s\configmap.yaml"  -n $Ns
-kubectl apply -f "$Repo\k8s\secret.yaml"     -n $Ns
+kubectl apply -f "$Repo\k8s\configmap-secret.yaml"  -n $Ns
 kubectl apply -f "$Repo\k8s\deployment.yaml" -n $Ns
 
 # Patch image + pull policy after apply so it always uses local build.
