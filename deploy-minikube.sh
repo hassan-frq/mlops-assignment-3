@@ -41,7 +41,7 @@ minikube addons enable metrics-server 2>/dev/null || true
 echo ""
 echo "[2/9] Building Docker image inside Minikube's Docker daemon..."
 eval "$(minikube docker-env)"
-docker build -t "${IMAGE_LOCAL}" .
+docker build -f app/Dockerfile -t "${IMAGE_LOCAL}" .
 
 # Patch the deployment to use the local image so we don't need a registry pull
 # (imagePullPolicy must be Never or IfNotPresent for local images in Minikube)
@@ -59,8 +59,8 @@ kubectl apply -f k8s/pvc.yaml
 # ---------------------------------------------------------------------------
 echo ""
 echo "[4/9] Applying ConfigMap and Secret..."
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/configmap-secret.yaml
+
 
 # ---------------------------------------------------------------------------
 # 5. Apply Deployment (with local image override)
